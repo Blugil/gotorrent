@@ -15,7 +15,7 @@ import (
 type Torrent struct {
   Peers []torrentfile.Peer
   PeerID [20]byte
-  TorrentFile torrentfile.TorrentFile
+  TF torrentfile.TorrentFile
 }
 
 type pieceProgress struct {
@@ -124,11 +124,11 @@ func downloadPiece(c *client.Client, pw *pieceWork) (*pieceResult, error) {
 
 
 func (t Torrent) calcPieceBounds(index int) (begin, end int) {
-  begin = index * t.TorrentFile.PieceLength
-  end = begin + t.TorrentFile.PieceLength
+  begin = index * t.TF.PieceLength
+  end = begin + t.TF.PieceLength
 
-  if end > t.TorrentFile.Length {
-    end = t.TorrentFile.Length
+  if end > t.TF.Length {
+    end = t.TF.Length
   }
 
   return begin, end
@@ -140,7 +140,7 @@ func (t Torrent) calculatePieceSize(index int) int {
 }
 
 func (t Torrent) StartDownload(peer torrentfile.Peer, pwQueue chan *pieceWork, prQueue chan *pieceResult) error {
-  client, err := client.New(peer, t.PeerID, t.TorrentFile.InfoHash)
+  client, err := client.New(peer, t.PeerID, t.TF.InfoHash)
   if err != nil {
     fmt.Printf("Could not handshake with peer %s, disconnecting\n", peer.String())
     return err
@@ -184,11 +184,11 @@ func (t Torrent) StartDownload(peer torrentfile.Peer, pwQueue chan *pieceWork, p
 }
 
 
-func (t Torrent) DownloadTorrent(outPath string) {
-  pieceWorkQueue := make(chan *pieceWork, len(t.TorrentFile.PieceHashes))
-  pieceResultQueue := make(chan *pieceResult, len(t.TorrentFile.PieceHashes))
+func (t Torrent) DownloadTorrent(outPath string) error {
+  pieceWorkQueue := make(chan *pieceWork, len(t.TF.PieceHashes))
+  pieceResultQueue := make(chan *pieceResult, len(t.TF.PieceHashes))
 
-  for index, peerHash := range t.TorrentFile.PieceHashes {
+  for index, peerHash := range t.TF.PieceHashes {
     pieceLength := t.calculatePieceSize(index)
     pieceWorkQueue <- &pieceWork{
       index: index,
@@ -201,12 +201,30 @@ func (t Torrent) DownloadTorrent(outPath string) {
     go t.StartDownload(peer, pieceWorkQueue, pieceResultQueue)
   }
 
-  finalFile := make([]byte, t.TorrentFile.Length)
+  // create a file the size of the torrent
+  f, err := file.New(outPath, t.TF, false)
+  if err != nil {
+    return err
+  }
+
+  defer func() {
+        if err := f.File.Close(); err != nil {
+            panic(err)
+        }
+  }()
+
+  // for each piece that finishes, write it into the correct bounds
+
+  //finalFile := make([]byte, t.TF.Length)
+
   donePieces := 0
-  for donePieces < len(t.TorrentFile.PieceHashes) {
+  for donePieces < len(t.TF.PieceHashes) {
     result := <- pieceResultQueue
     begin, end := t.calcPieceBounds(result.index)
-    copy(finalFile[begin:end], result.buf) 
+    err = f.WritePieceToFile(result.buf, begin, end)
+    if err != nil {
+      return err
+    }
     donePieces++
   }
   close(pieceWorkQueue)
@@ -214,5 +232,9 @@ func (t Torrent) DownloadTorrent(outPath string) {
   fmt.Printf("\npieces copied: %d\n", donePieces)
   fmt.Println("Successfully downloaded the torrent")
   
-  file.WriteBufToFile(outPath, t.TorrentFile.Name, finalFile)
+  //_, err := file.WriteBufToFile(outPath, t.TF.Name, finalFile)
+  if err != nil {
+    return err
+  }
+  return nil
 }

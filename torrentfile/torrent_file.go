@@ -174,7 +174,8 @@ func (t *TorrentFile) BuildTrackerUrl(port uint16) (string, error) {
   return base.String(), nil
 }
 
-func (t *TorrentFile) RequestPeers(port uint16) ([]Peer, error) {
+func (t *TorrentFile) RequestPeers() ([]Peer, error) {
+  var port uint16 = 6969
   url, err := t.BuildTrackerUrl(port)
   if err != nil {
     return nil, err
