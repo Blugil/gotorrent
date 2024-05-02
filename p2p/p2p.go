@@ -69,12 +69,12 @@ func (state *pieceProgress) readMessage() error {
   return nil
 }
 
-func  validatePiece(pw *pieceWork, buf []byte) error {
+func  validatePiece(pieceHash [20]byte, buf []byte) (bool, error) {
   hash := sha1.Sum(buf)
-  if !bytes.Equal(pw.hash[:], hash[:]) {
-    return fmt.Errorf("Piece hash doesn't match torrent file\nExpected: %x, got: %x", pw.hash, hash) 
+  if !bytes.Equal(pieceHash[:], hash[:]) {
+    return false, fmt.Errorf("Piece hash doesn't match torrent file\nExpected: %x, got: %x", pieceHash, hash) 
   }
-  return nil
+  return true, nil
 }
 
 func downloadPiece(c *client.Client, pw *pieceWork) (*pieceResult, error) {
@@ -139,7 +139,7 @@ func (t Torrent) calculatePieceSize(index int) int {
   return end - begin
 }
 
-func (t Torrent) StartDownload(peer torrentfile.Peer, pwQueue chan *pieceWork, prQueue chan *pieceResult) error {
+func (t Torrent) startDownload(peer torrentfile.Peer, pwQueue chan *pieceWork, prQueue chan *pieceResult) error {
   client, err := client.New(peer, t.PeerID, t.TF.InfoHash)
   if err != nil {
     fmt.Printf("Could not handshake with peer %s, disconnecting\n", peer.String())
@@ -163,8 +163,8 @@ func (t Torrent) StartDownload(peer torrentfile.Peer, pwQueue chan *pieceWork, p
       return err
     }
 
-    err = validatePiece(pw, pr.buf)
-    if err != nil {
+    valid, err := validatePiece(pw.hash, pr.buf)
+    if !valid {
       pwQueue <- pw
       return err
     }
@@ -174,8 +174,6 @@ func (t Torrent) StartDownload(peer torrentfile.Peer, pwQueue chan *pieceWork, p
       return err
     }
 
-    //client.Bitfield.SetPiece(pw.index)
-
     cli.ProgressBar(cap(pwQueue) - len(pwQueue), cap(pwQueue))
     prQueue <- pr
   }
@@ -183,28 +181,63 @@ func (t Torrent) StartDownload(peer torrentfile.Peer, pwQueue chan *pieceWork, p
   return nil
 }
 
+func (t Torrent) DownloadTorrent(outPath string, resume bool) error {
 
-func (t Torrent) DownloadTorrent(outPath string) error {
   pieceWorkQueue := make(chan *pieceWork, len(t.TF.PieceHashes))
   pieceResultQueue := make(chan *pieceResult, len(t.TF.PieceHashes))
 
-  for index, peerHash := range t.TF.PieceHashes {
-    pieceLength := t.calculatePieceSize(index)
-    pieceWorkQueue <- &pieceWork{
-      index: index,
-      hash: peerHash,
-      length: pieceLength,
+
+  var f *file.File
+  var err error
+
+  // for resuming a download
+  if !resume {
+    fmt.Println("Starting torrent...")
+    f, err = file.New(outPath, t.TF)
+    if err != nil {
+      return err
     }
-  }
 
-  for _, peer := range t.Peers {
-    go t.StartDownload(peer, pieceWorkQueue, pieceResultQueue)
-  }
-
-  // create a file the size of the torrent
-  f, err := file.New(outPath, t.TF, false)
-  if err != nil {
-    return err
+    for index, pieceHash := range t.TF.PieceHashes {
+      pieceLength := t.calculatePieceSize(index)
+      pieceWorkQueue <- &pieceWork{
+        index: index,
+        hash: pieceHash,
+        length: pieceLength,
+      }
+    }
+  } else {
+    fmt.Println("Continuing torrent...")
+    f, err = file.Open(outPath)
+    if err != nil {
+      return err
+    }
+    for index, pieceHash := range t.TF.PieceHashes {
+      pieceLength := t.calculatePieceSize(index)
+      pieceBuffer, err := f.ReadPieceFromFile(t.calcPieceBounds(index))
+      if err != nil {
+        return err
+      }
+      valid, err := validatePiece(pieceHash, pieceBuffer)
+      if err != nil {
+        return err
+      }
+      // add the piece to the queue if it contains an invalid hash (isn't in the file)
+      // probably pretty expensive, but validates against malicious byte injection into an empty file
+      // could just validate against 0's which is what the partial file should have instead of
+      // actual data due to the truncate
+      if !valid {
+        pieceWorkQueue <- &pieceWork{
+          index: index,
+          hash: pieceHash,
+          length: pieceLength,
+        }
+      }
+    }
+    if len(pieceWorkQueue) == 0 {
+      return fmt.Errorf("Selected file is already a valid download of this torrent")
+    }
+    fmt.Printf("There are %x pieces remaining to download.\n", len(pieceWorkQueue))
   }
 
   defer func() {
@@ -213,9 +246,11 @@ func (t Torrent) DownloadTorrent(outPath string) error {
         }
   }()
 
-  // for each piece that finishes, write it into the correct bounds
+  for _, peer := range t.Peers {
+    go t.startDownload(peer, pieceWorkQueue, pieceResultQueue)
+  }
 
-  //finalFile := make([]byte, t.TF.Length)
+  // create a file the size of the torrent
 
   donePieces := 0
   for donePieces < len(t.TF.PieceHashes) {
@@ -232,7 +267,6 @@ func (t Torrent) DownloadTorrent(outPath string) error {
   fmt.Printf("\npieces copied: %d\n", donePieces)
   fmt.Println("Successfully downloaded the torrent")
   
-  //_, err := file.WriteBufToFile(outPath, t.TF.Name, finalFile)
   if err != nil {
     return err
   }

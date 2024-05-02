@@ -31,14 +31,12 @@ func handshakeWithPeer(conn net.Conn, peerID [20]byte, infohash [20]byte, peer t
 		PeerID:   peerID,
 	}
 
-	//fmt.Printf("Sending handshake: %s\n", peer.String())
 	req := h.Serialize()
 	_, err := conn.Write(req)
 	if err != nil {
 		return nil, err
 	}
 
-	//fmt.Printf("Receiving handshake: %s\n", peer.String())
 	res, err := handshake.Read(conn)
 	if err != nil {
 		return nil, err
@@ -109,7 +107,6 @@ func (c *Client) KeepAlive() error {
 	if err != nil {
 		return err
 	}
-	//fmt.Printf("sent keepalive to peer: %s\n", c.peer.IP.String())
 	return nil
 }
 

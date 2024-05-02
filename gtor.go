@@ -26,7 +26,7 @@ func main() {
     TF: tf,
   }
   
-  err = t.DownloadTorrent(outPath)
+  err = t.DownloadTorrent(outPath, false)
   if err != nil {
     fmt.Println(err)
   }

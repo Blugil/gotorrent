@@ -1,7 +1,6 @@
 package file
 
 import (
-	"gotorrent/bitfield"
 	"gotorrent/torrentfile"
 	"os"
 	"path/filepath"
@@ -9,58 +8,35 @@ import (
 
 type File struct {
   File *os.File
-  Downloaded bitfield.Bitfield
 }
 
-func New(path string, tf torrentfile.TorrentFile, resume bool) (*File, error) {
+func New(path string, tf torrentfile.TorrentFile) (*File, error) {
 
-  var f *os.File
-  var err error
-
-  if !resume {
-    f, err = AllocateFile(path, tf.Name, tf.Length)
-    if err != nil {
-      return nil, err
-    }
-  } else {
-
+  f, err := AllocateFile(path, tf.Name, tf.Length)
+  if err != nil {
+    return nil, err
   }
-
-  // read downloaded pieces and specify in bitfield
-  var bitfield bitfield.Bitfield
-  bitfield = make([]byte, 0)
 
   return &File{
     File: f,
-    Downloaded: bitfield,
   }, nil
 
 }
 
-func WriteBufToFile(path, name string, buf []byte) (int, error) {
-  f, err := os.Create(filepath.Join(path, filepath.Base(name))) 
+func Open(path string) (*File, error) {
+  f, err := os.Open(path)
   if err != nil {
-    return 0, err
+    return nil, err
   }
+  //check extension to gtor 
 
-  defer func() {
-        if err := f.Close(); err != nil {
-            panic(err)
-        }
-  }()
-
-  bytesWritten, err := f.Write(buf)
-  if err != nil {
-    return 0, err
-  }
-
-  return bytesWritten, nil
+  return &File{
+    File: f,
+  }, nil
 }
 
-// creates an allocated file the size of the file to be downloaded
 func AllocateFile(path, name string, fileSize int) (*os.File, error) {
-
-  f, err := os.Create(filepath.Join(path, filepath.Base(name))) 
+  f, err := os.Create(filepath.Join(path, filepath.Base(name + ".gtor"))) 
   if err != nil {
     return nil, err
   }
@@ -72,6 +48,20 @@ func AllocateFile(path, name string, fileSize int) (*os.File, error) {
     return nil, err
   }
   return f, nil
+}
+
+func (f *File) ReadPieceFromFile(begin, end int) ([]byte, error) {
+  buf := make([]byte, end-begin)
+  _, err := f.File.Seek(int64(begin), 0)
+  if err != nil {
+    return nil, err
+  }
+
+  _, err = f.File.Read(buf)
+  if err != nil {
+    return nil, err
+  }
+  return buf, nil
 }
 
 func (f *File) WritePieceToFile(buf []byte, begin, end int) error {
@@ -87,9 +77,5 @@ func (f *File) WritePieceToFile(buf []byte, begin, end int) error {
   }
 
   return nil
-}
-
-func (f *File) ReadPiecesFromFile() error {
-  return nil 
 }
 
