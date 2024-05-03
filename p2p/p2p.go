@@ -232,7 +232,7 @@ func (t Torrent) DownloadTorrent(outPath, resumePath string, resume bool) error 
 		if len(pieceWorkQueue) == 0 {
 			return fmt.Errorf("Selected file is already a valid download of this torrent")
 		}
-		fmt.Printf("There are %x pieces remaining to download.\n", len(pieceWorkQueue))
+		fmt.Printf("There are %d pieces remaining to download.\n", len(pieceWorkQueue))
 	}
 
 	defer func() {
@@ -260,13 +260,15 @@ func (t Torrent) DownloadTorrent(outPath, resumePath string, resume bool) error 
 		donePieces++
 	}
 
+  fmt.Println()
+
 	close(pieceWorkQueue)
 
-	fmt.Printf("\npieces written: %d\n", donePieces)
+	fmt.Println("Pieces written to file:", donePieces)
 	fmt.Println("Successfully downloaded the torrent")
 
 	if err != nil {
 		return err
 	}
-	return nil
+  return nil
 }

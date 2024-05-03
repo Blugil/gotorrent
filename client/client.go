@@ -101,7 +101,7 @@ func New(peer torrentfile.Peer, peerID, infohash [20]byte) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) KeepAlive() error {
+func (c *Client) SendKeepAlive() error {
 	message := message.Message{}
 	_, err := c.Conn.Write(message.Serialize())
 	if err != nil {
@@ -118,7 +118,6 @@ func (c *Client) SendUnchoke() error {
 	if err != nil {
 		return err
 	}
-	//fmt.Printf("sent unchoke to peer: %s\n", c.peer.IP.String())
 	return nil
 }
 
@@ -130,7 +129,6 @@ func (c *Client) SendChoke() error {
 	if err != nil {
 		return err
 	}
-	//fmt.Printf("sent choke to peer: %s\n", c.peer.IP.String())
 	return nil
 }
 
@@ -144,7 +142,6 @@ func (c *Client) SendInterested() error {
 	}
 
 	c.Interested = true
-	//fmt.Printf("sent interested to peer: %s\n", c.peer.IP.String())
 	return nil
 }
 
@@ -158,7 +155,6 @@ func (c *Client) SendUninterested() error {
 	}
 
 	c.Interested = true
-	//fmt.Printf("sent uninterested to peer: %s\n", c.peer.IP.String())
 	return nil
 }
 
