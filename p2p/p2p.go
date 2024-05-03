@@ -181,7 +181,7 @@ func (t Torrent) startDownload(peer torrentfile.Peer, pwQueue chan *pieceWork, p
   return nil
 }
 
-func (t Torrent) DownloadTorrent(outPath string, resume bool) error {
+func (t Torrent) DownloadTorrent(outPath, resumePath string, resume bool) error {
 
   pieceWorkQueue := make(chan *pieceWork, len(t.TF.PieceHashes))
   pieceResultQueue := make(chan *pieceResult, len(t.TF.PieceHashes))
@@ -208,7 +208,7 @@ func (t Torrent) DownloadTorrent(outPath string, resume bool) error {
     }
   } else {
     fmt.Println("Continuing torrent...")
-    f, err = file.Open(outPath)
+    f, err = file.Open(resumePath)
     if err != nil {
       return err
     }
@@ -219,9 +219,6 @@ func (t Torrent) DownloadTorrent(outPath string, resume bool) error {
         return err
       }
       valid, err := validatePiece(pieceHash, pieceBuffer)
-      if err != nil {
-        return err
-      }
       // add the piece to the queue if it contains an invalid hash (isn't in the file)
       // probably pretty expensive, but validates against malicious byte injection into an empty file
       // could just validate against 0's which is what the partial file should have instead of
@@ -246,6 +243,8 @@ func (t Torrent) DownloadTorrent(outPath string, resume bool) error {
         }
   }()
 
+  numPiecesToDownload := len(pieceWorkQueue)
+
   for _, peer := range t.Peers {
     go t.startDownload(peer, pieceWorkQueue, pieceResultQueue)
   }
@@ -253,18 +252,19 @@ func (t Torrent) DownloadTorrent(outPath string, resume bool) error {
   // create a file the size of the torrent
 
   donePieces := 0
-  for donePieces < len(t.TF.PieceHashes) {
+  for donePieces < numPiecesToDownload {
     result := <- pieceResultQueue
     begin, end := t.calcPieceBounds(result.index)
-    err = f.WritePieceToFile(result.buf, begin, end)
+    err := f.WritePieceToFile(result.buf, begin, end)
     if err != nil {
       return err
     }
     donePieces++
   }
+
   close(pieceWorkQueue)
 
-  fmt.Printf("\npieces copied: %d\n", donePieces)
+  fmt.Printf("\npieces written: %d\n", donePieces)
   fmt.Println("Successfully downloaded the torrent")
   
   if err != nil {

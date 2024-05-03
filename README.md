@@ -4,5 +4,6 @@ Worked along with the go bittorrent client blogpost from Jesse Li found [here](h
 
 Working on additional features like:
 - [ ] seeding
-- [ ] partial downloads
-- [ ] improved cli
+- [x] partial downloads
+- [x] improved cli
+

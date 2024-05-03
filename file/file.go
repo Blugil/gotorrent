@@ -24,7 +24,7 @@ func New(path string, tf torrentfile.TorrentFile) (*File, error) {
 }
 
 func Open(path string) (*File, error) {
-  f, err := os.Open(path)
+  f, err := os.OpenFile(path, os.O_RDWR, 0644)
   if err != nil {
     return nil, err
   }

@@ -16,10 +16,6 @@ func main() {
 
   flag.Parse()
 
-  fmt.Println("in path is: ", *inPath)
-  fmt.Println("out path is: ", *outPath)
-  fmt.Println("resume path is: ", *resumePath)
-
   tf, err := torrentfile.Open(*inPath)
   if err != nil {
     panic(err)
@@ -39,12 +35,9 @@ func main() {
   }
 
   resume := *resumePath != ""
-  
-  fmt.Println("resume:", resume)
 
-  err = t.DownloadTorrent(*outPath, resume)
+  err = t.DownloadTorrent(*outPath, *resumePath, resume)
   if err != nil {
     fmt.Println(err)
   }
-  
 }
