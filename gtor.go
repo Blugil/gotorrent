@@ -9,35 +9,33 @@ import (
 
 func main() {
 
-  inPath := flag.String("t", "", "torrent file for download")
-  outPath := flag.String("o", ".", "the download output path")
-  resumePath := flag.String("r", "", "input partial download gtor file to resume")
+	inPath := flag.String("t", "", "torrent file for download")
+	outPath := flag.String("o", ".", "the download output path")
+	resumePath := flag.String("r", "", "input partial download gtor file to resume")
 
+	flag.Parse()
 
-  flag.Parse()
+	tf, err := torrentfile.Open(*inPath)
+	if err != nil {
+		panic(err)
+	}
 
-  tf, err := torrentfile.Open(*inPath)
-  if err != nil {
-    panic(err)
-  }
+	peers, err := tf.RequestPeers()
 
-  peers, err := tf.RequestPeers()
+	t := p2p.Torrent{
+		Peers:  peers,
+		PeerID: tf.PeerID,
+		TF:     tf,
+	}
 
+	if *inPath == "" {
+		panic(fmt.Errorf("No input file passed in"))
+	}
 
-  t := p2p.Torrent {
-    Peers: peers,
-    PeerID: tf.PeerID,
-    TF: tf,
-  }
+	resume := *resumePath != ""
 
-  if *inPath == "" {
-    panic(fmt.Errorf("No input file passed in"))
-  }
-
-  resume := *resumePath != ""
-
-  err = t.DownloadTorrent(*outPath, *resumePath, resume)
-  if err != nil {
-    fmt.Println(err)
-  }
+	err = t.DownloadTorrent(*outPath, *resumePath, resume)
+	if err != nil {
+		fmt.Println(err)
+	}
 }
